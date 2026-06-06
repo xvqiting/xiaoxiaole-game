@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>H5消消乐小游戏</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #e8f4fd;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 30px 10px;
+            font-family: "Microsoft Yahei", sans-serif;
+        }
+        .top-bar {
+            margin-bottom: 16px;
+            font-size: 22px;
+        }
+        #score-text {
+            color: #f25555;
+            font-weight: bold;
+        }
+        #reset-btn {
+            padding: 7px 18px;
+            border: none;
+            background: #3488eb;
+            color: #fff;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-left: 20px;
+        }
+        #game-wrap {
+            display: grid;
+            grid-template-columns: repeat(8, 52px);
+            gap: 5px;
+            background: #b8d4ee;
+            padding:5px;
+            border-radius:10px;
+        }
+        .item {
+            width: 52px;
+            height:52px;
+            border-radius:8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .item.active {
+            transform: scale(0.88);
+            box-shadow: 0 0 0 3px #fff;
+        }
+        /* 5种糖果颜色 */
+        .t1{background:#ff5959;}
+        .t2{background:#4ccd79;}
+        .t3{background:#499dff;}
+        .t4{background:#ffd033;}
+        .t5{background:#b26cff;}
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        当前分数：<span id="score-text">0</span>
+        <button id="reset-btn">重新开始</button>
+    </div>
+    <div id="game-wrap"></div>
+
+    <script>
+        // 配置参数
+        const ROWS = 8;
+        const COLS = 8;
+        const TYPE_NUM = 5;
+        let score = 0;
+        let select = null; // 保存选中 {r,c}
+        let mapData = []; // 棋盘数据源
+
+        const gameDom = document.getElementById('game-wrap');
+        const scoreDom = document.getElementById('score-text');
+        const resetBtn = document.getElementById('reset-btn');
+
+        // 初始化游戏
+        function initGame() {
+            score = 0;
+            scoreDom.innerText = score;
+            select = null;
+            gameDom.innerHTML = '';
+            mapData = [];
+            // 初始化数组
+            for(let r=0;r<ROWS;r++){
+                mapData[r] = [];
+                for(let c=0;c<COLS;c++){
+                    mapData[r][c] = getRandomType();
+                }
+            }
+            // 消除开局自带三消
+            while(findRemoveList().length > 0){
+                for(let r=0;r<ROWS;r++){
+                    for(let c=0;c<COLS;c++){
+                        mapData[r][c] = getRandomType();
+                    }
+                }
+            }
+            render();
+        }
+        // 随机类型 1~5
+        function getRandomType(){
+            return Math.floor(Math.random() * TYPE_NUM) + 1;
+        }
+        // 渲染棋盘
+        function render(){
+            gameDom.innerHTML = '';
+            for(let r=0;r<ROWS;r++){
+                for(let c=0;c<COLS;c++){
+                    let div = document.createElement('div');
+                    div.className = `item t${mapData[r][c]}`;
+                    div.dataset.r = r;
+                    div.dataset.c = c;
+                    div.onclick = ()=>clickItem(r,c);
+                    gameDom.appendChild(div);
+                }
+            }
+        }
+        // 点击方块
+        function clickItem(r,c){
+            // 第一次选中
+            if(!select){
+                select = {r,c};
+                // 添加选中样式
+                let dom = getDomByRC(r,c);
+                dom.classList.add('active');
+            }else{
+                // 第二次点击 判断是否上下左右相邻
+                const {r:r1,c:c1} = select;
+                const isAdj = (Math.abs(r-r1)===1 && c===c1) || (Math.abs(c-c1)===1 && r===r1);
+                if(isAdj){
+                    // 交换数据
+                    [mapData[r1][c1], mapData[r][c]] = [mapData[r][c], mapData[r1][c1]];
+                    render();
+                    setTimeout(()=>{
+                        let delList = findRemoveList();
+                        if(delList.length === 0){
+                            // 无法消除，还原
+                            [mapData[r1][c1], mapData[r][c]] = [mapData[r][c], mapData[r1][c1]];
+                            render();
+                        }else{
+                            startDel();
+                        }
+                    },180);
+                }
+                select = null;
+            }
+        }
+        // 通过行列获取dom元素
+        function getDomByRC(r,c){
+            let all = document.querySelectorAll('.item');
+            let idx = r*COLS + c;
+            return all[idx];
+        }
+        // 查找所有需要消除的格子
+        function findRemoveList(){
+            let set = new Set();
+            // 横向查找三消
+            for(let r=0;r<ROWS;r++){
+                for(let c=0;c<COLS-2;c++){
+                    let val = mapData[r][c];
+                    if(!val) continue;
+                    if(mapData[r][c+1]===val && mapData[r][c+2]===val){
+                        set.add(`${r},${c}`);
+                        set.add(`${r},${c+1}`);
+                        set.add(`${r},${c+2}`);
+                        // 连续更多
+                        let k = c+3;
+                        while(k<COLS && mapData[r][k]===val){
+                            set.add(`${r},${k}`);k++;
+                        }
+                    }
+                }
+            }
+            // 纵向查找三消
+            for(let c=0;c<COLS;c++){
+                for(let r=0;r<ROWS-2;r++){
+                    let val = mapData[r][c];
+                    if(!val) continue;
+                    if(mapData[r+1][c]===val && mapData[r+2][c]===val){
+                        set.add(`${r},${c}`);
+                        set.add(`${r+1},${c}`);
+                        set.add(`${r+2},${c}`);
+                        let k=r+3;
+                        while(k<ROWS && mapData[k][c]===val){
+                            set.add(`${k},${c}`);k++;
+                        }
+                    }
+                }
+            }
+            // set转数组
+            let arr = [];
+            set.forEach(str=>{
+                let [rr,cc] = str.split(',').map(Number);
+                arr.push({r:rr,c:cc});
+            })
+            return arr;
+        }
+        // 消除逻辑：清空、下落、补新、连锁消除
+        function startDel(){
+            let delArr = findRemoveList();
+            if(delArr.length === 0) return;
+            // 加分
+            score += delArr.length * 10;
+            scoreDom.innerText = score;
+            // 标记为空0
+            delArr.forEach(item=>{
+                mapData[item.r][item.c] = 0;
+            })
+            render();
+            setTimeout(()=>{
+                dropDown(); // 方块下落
+                fillNew();  // 顶部补充新方块
+                render();
+                setTimeout(startDel,220); // 连锁消除
+            },250);
+        }
+        // 列方块下落，空位落到最下面
+        function dropDown(){
+            for(let c=0;c<COLS;c++){
+                let temp = [];
+                // 从下往上收集有效方块
+                for(let r=ROWS-1;r>=0;r--){
+                    if(mapData[r][c]!==0) temp.push(mapData[r][c]);
+                }
+                // 从底向上填充
+                for(let r=ROWS-1;r>=0;r--){
+                    mapData[r][c] = temp.length ? temp.shift() : 0;
+                }
+            }
+        }
+        // 空白格子填充新方块
+        function fillNew(){
+            for(let c=0;c<COLS;c++){
+                for(let r=0;r<ROWS;r++){
+                    if(mapData[r][c]===0) mapData[r][c] = getRandomType();
+                }
+            }
+        }
+        // 重置按钮
+        resetBtn.onclick = initGame;
+        // 页面启动
+        initGame();
+    </script>
+</body>
+</html>
